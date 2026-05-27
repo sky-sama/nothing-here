@@ -271,7 +271,7 @@ function waitGathering() {
   return new Promise((resolve) => {
     if (pc.iceGatheringState === 'complete') { resolve(); return; }
     const t = setInterval(() => { if (pc.iceGatheringState === 'complete') { clearInterval(t); resolve(); } }, 200);
-    setTimeout(() => { clearInterval(t); resolve(); }, 8000);
+    setTimeout(() => { clearInterval(t); resolve(); }, 60000);
   });
 }
 
