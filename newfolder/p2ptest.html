@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WebRTC P2P 直连 Demo</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+  h1 { font-size: 1.4rem; margin-bottom: 0.5rem; }
+  .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 20px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+  .card h2 { font-size: 1.1rem; margin-top: 0; margin-bottom: 12px; color: #333; }
+  label { display: block; font-size: 0.85rem; color: #555; margin-bottom: 4px; margin-top: 10px; }
+  textarea, input[type="text"] { width: 100%; font-family: monospace; font-size: 0.8rem; padding: 8px; border: 1px solid #ddd; border-radius: 6px; resize: vertical; }
+  textarea { min-height: 80px; }
+  .btn { margin-top: 10px; padding: 8px 14px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; transition: background .2s; }
+  .btn-primary { background: #2563eb; color: #fff; }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-secondary { background: #e5e7eb; color: #333; }
+  .btn-secondary:hover { background: #d1d5db; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .status { margin-top: 8px; font-size: 0.85rem; font-weight: 600; }
+  .status.connected { color: #16a34a; }
+  .status.failed { color: #dc2626; }
+  .status.connecting { color: #d97706; }
+  .chat { margin-top: 20px; background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+  .chat h2 { font-size: 1.1rem; margin-top: 0; }
+  #messages { height: 200px; overflow-y: auto; border: 1px solid #eee; border-radius: 6px; padding: 10px; background: #fafafa; margin-bottom: 10px; }
+  .msg { margin-bottom: 6px; font-size: 0.9rem; }
+  .msg .who { font-weight: 600; color: #2563eb; }
+  .msg .who.self { color: #16a34a; }
+  .msg .time { color: #999; font-size: 0.75rem; margin-left: 6px; }
+  .row { display: flex; gap: 8px; }
+  .row input { flex: 1; }
+  .log { margin-top: 20px; background: #1e1e1e; color: #d4d4d4; border-radius: 10px; padding: 12px; font-family: monospace; font-size: 0.8rem; max-height: 160px; overflow-y: auto; }
+  .log .entry { margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px; }
+  .hint { font-size: 0.8rem; color: #888; margin-top: 6px; line-height: 1.4; }
+</style>
+</head>
+<body>
+
+<h1>WebRTC DataChannel P2P 直连实验</h1>
+<div class="subtitle">纯前端实现，无需服务器。通过手动交换 SDP 完成信令。</div>
+
+<div class="grid">
+  <div class="card">
+    <h2>发起方 (Offer)</h2>
+    <label>操作步骤：点击"创建 Offer" → 复制生成的文本发给对方 → 等待对方发回 Answer → 粘贴并点击"连接"</label>
+    <button class="btn btn-primary" id="btnOffer" onclick="createOffer()">1. 创建 Offer</button>
+    <label>生成的 Offer（复制给对方）:</label>
+    <textarea id="localOffer" readonly placeholder="点击上方按钮生成..."></textarea>
+    
+    <label>对方发来的 Answer（粘贴到这里）:</label>
+    <textarea id="remoteAnswer" placeholder="粘贴对方发来的 Answer..."></textarea>
+    <button class="btn btn-secondary" id="btnConnect" onclick="connectAnswer()" disabled>2. 连接</button>
+    <div class="status" id="statusA">状态: 未连接</div>
+  </div>
+
+  <div class="card">
+    <h2>接收方 (Answer)</h2>
+    <label>操作步骤：等待对方发来 Offer → 粘贴到下方 → 点击"创建 Answer" → 复制生成的文本发回给对方</label>
+    <label>对方发来的 Offer（粘贴到这里）:</label>
+    <textarea id="remoteOffer" placeholder="粘贴对方发来的 Offer..."></textarea>
+    <button class="btn btn-primary" id="btnAnswer" onclick="createAnswer()">1. 创建 Answer</button>
+    
+    <label>生成的 Answer（复制给对方）:</label>
+    <textarea id="localAnswer" readonly placeholder="点击上方按钮生成..."></textarea>
+    <div class="status" id="statusB">状态: 未连接</div>
+  </div>
+</div>
+
+<div class="chat">
+  <h2>聊天室 <span style="font-size:0.8rem;color:#666;font-weight:normal;">（DataChannel）</span></h2>
+  <div id="messages"></div>
+  <div class="row">
+    <input type="text" id="chatInput" placeholder="输入消息按回车发送..." onkeydown="if(event.key==='Enter') sendMsg()" disabled>
+    <button class="btn btn-primary" onclick="sendMsg()" id="btnSend" disabled>发送</button>
+  </div>
+  <div class="hint">
+    提示：先在一端创建 Offer，另一端创建 Answer，然后 Offer 端粘贴 Answer 点击连接。双方都在同一页面操作。<br>
+    跨公网时若打洞失败，连接会超时（目前未配置 TURN 中继，仅使用公共 STUN）。
+  </div>
+</div>
+
+<div class="log" id="log">
+  <div class="entry">[系统] 页面已加载，WebRTC 就绪。</div>
+</div>
+
+<script>
+// 使用公共 STUN 服务器帮助 NAT 打洞
+const ICE_SERVERS = [
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" },
+  { urls: "stun:stun2.l.google.com:19302" }
+];
+
+let pc = null;
+let dc = null;
+let role = null; // 'offer' or 'answer'
+
+function log(msg) {
+  const div = document.createElement('div');
+  div.className = 'entry';
+  div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  document.getElementById('log').prepend(div);
+}
+
+function setStatus(id, text, cls) {
+  const el = document.getElementById(id);
+  el.textContent = `状态: ${text}`;
+  el.className = 'status ' + (cls || '');
+}
+
+function addMsg(who, text) {
+  const div = document.createElement('div');
+  div.className = 'msg';
+  const self = who === '我';
+  div.innerHTML = `<span class="who ${self ? 'self' : ''}">${who}</span><span class="time">${new Date().toLocaleTimeString()}</span>: ${escapeHtml(text)}`;
+  const box = document.getElementById('messages');
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function escapeHtml(t) {
+  return t.replace(/[&<<>"']/g, m => ({'&':'&amp;','<<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m]));
+}
+
+function setupPC() {
+  pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
+  pc.oniceconnectionstatechange = () => {
+    log(`ICE 状态变化: ${pc.iceConnectionState}`);
+    if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+      setStatus(role === 'offer' ? 'statusA' : 'statusB', '已连接 (P2P)', 'connected');
+    } else if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+      setStatus(role === 'offer' ? 'statusA' : 'statusB', '断开/失败', 'failed');
+    }
+  };
+
+  pc.ondatachannel = (e) => {
+    log('接收到 DataChannel');
+    dc = e.channel;
+    setupDC();
+  };
+
+  pc.onicecandidate = (e) => {
+    // 使用 trickle 简化：我们在 gathering complete 后统一输出 SDP，所以这里不需要单独处理
+  };
+}
+
+function setupDC() {
+  dc.onopen = () => {
+    log('DataChannel 已打开，可以聊天了');
+    document.getElementById('chatInput').disabled = false;
+    document.getElementById('btnSend').disabled = false;
+  };
+  dc.onclose = () => {
+    log('DataChannel 已关闭');
+    document.getElementById('chatInput').disabled = true;
+    document.getElementById('btnSend').disabled = true;
+  };
+  dc.onmessage = (e) => {
+    addMsg('对方', e.data);
+  };
+}
+
+function waitGatheringComplete() {
+  return new Promise((resolve) => {
+    if (pc.iceGatheringState === 'complete') {
+      resolve();
+      return;
+    }
+    const check = setInterval(() => {
+      if (pc.iceGatheringState === 'complete') {
+        clearInterval(check);
+        resolve();
+      }
+    }, 200);
+    // 保险：最多等 8 秒
+    setTimeout(() => { clearInterval(check); resolve(); }, 8000);
+  });
+}
+
+async function createOffer() {
+  try {
+    role = 'offer';
+    setupPC();
+    dc = pc.createDataChannel('chat', { ordered: true });
+    setupDC();
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    log('Offer 已设置到 local desc，等待 ICE 收集...');
+
+    await waitGatheringComplete();
+    const sdp = JSON.stringify(pc.localDescription);
+    document.getElementById('localOffer').value = sdp;
+    log('Offer + ICE 候选已生成，请复制给对方');
+    setStatus('statusA', '等待对方 Answer...', 'connecting');
+    document.getElementById('btnConnect').disabled = false;
+  } catch (err) {
+    log('创建 Offer 失败: ' + err.message);
+    console.error(err);
+  }
+}
+
+async function connectAnswer() {
+  try {
+    const text = document.getElementById('remoteAnswer').value.trim();
+    if (!text) return alert('请先粘贴对方发来的 Answer');
+    const desc = JSON.parse(text);
+    await pc.setRemoteDescription(desc);
+    log('Answer 已设置，正在建立连接...');
+    setStatus('statusA', '连接中...', 'connecting');
+  } catch (err) {
+    log('连接失败: ' + err.message);
+    alert('解析 Answer 出错，请检查粘贴内容');
+  }
+}
+
+async function createAnswer() {
+  try {
+    role = 'answer';
+    const text = document.getElementById('remoteOffer').value.trim();
+    if (!text) return alert('请先粘贴对方发来的 Offer');
+    const offer = JSON.parse(text);
+
+    setupPC();
+    await pc.setRemoteDescription(offer);
+    log('Offer 已设置');
+
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    log('Answer 已设置到 local desc，等待 ICE 收集...');
+
+    await waitGatheringComplete();
+    const sdp = JSON.stringify(pc.localDescription);
+    document.getElementById('localAnswer').value = sdp;
+    log('Answer + ICE 候选已生成，请复制给对方');
+    setStatus('statusB', '等待对方连接...', 'connecting');
+  } catch (err) {
+    log('创建 Answer 失败: ' + err.message);
+    console.error(err);
+  }
+}
+
+function sendMsg() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text || !dc || dc.readyState !== 'open') return;
+  dc.send(text);
+  addMsg('我', text);
+  input.value = '';
+}
+
+// 如果用户直接刷新页面，清理旧连接
+window.addEventListener('beforeunload', () => {
+  if (pc) pc.close();
+});
+</script>
+
+</body>
+</html>
