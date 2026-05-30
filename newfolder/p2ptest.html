@@ -238,7 +238,7 @@ function waitGathering() {
   return new Promise((resolve) => {
     if (pc.iceGatheringState === 'complete') { resolve(); return; }
     const t = setInterval(() => { if (pc.iceGatheringState === 'complete') { clearInterval(t); resolve(); } }, 200);
-    setTimeout(() => { clearInterval(t); resolve(); }, 8000);
+    setTimeout(() => { clearInterval(t); resolve(); }, 60000);
   });
 }
 
@@ -278,7 +278,7 @@ async function startAsOffer() {
           stopPoll();
         }
       } catch (e) { log('轮询出错: ' + e.message); }
-    }, 1500);
+    }, 15000);
 
   } catch (err) {
     log('发起失败: ' + err.message);
@@ -316,7 +316,7 @@ async function startAsAnswer() {
           stopPoll();
         }
       } catch (e) { log('轮询出错: ' + e.message); }
-    }, 1500);
+    }, 15000);
 
   } catch (err) {
     log('接收失败: ' + err.message);
