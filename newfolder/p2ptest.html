@@ -3,21 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WebRTC P2P 安全直连 Demo</title>
+<title>WebRTC P2P 安全直连</title>
 <style>
   * { box-sizing: border-box; }
-  body { font-family: system-ui, -apple-system, sans-serif; max-width: 960px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
   h1 { font-size: 1.4rem; margin-bottom: 0.3rem; }
   .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 16px; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
   .card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
-  .card h2 { font-size: 1.05rem; margin-top: 0; margin-bottom: 12px; color: #333; display: flex; align-items: center; gap: 6px; }
-  .badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: #e0e7ff; color: #3730a3; font-weight: 600; }
+  .card h2 { font-size: 1.05rem; margin-top: 0; margin-bottom: 12px; color: #333; }
   label { display: block; font-size: 0.82rem; color: #555; margin-bottom: 4px; margin-top: 10px; }
-  textarea, input[type="text"], input[type="password"], select { width: 100%; font-family: monospace; font-size: 0.82rem; padding: 8px; border: 1px solid #ddd; border-radius: 6px; }
-  textarea { min-height: 70px; resize: vertical; }
-  .btn { padding: 8px 14px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.88rem; transition: background .2s; margin-top: 8px; }
+  input, textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-family: monospace; font-size: 0.85rem; }
+  textarea { min-height: 60px; resize: vertical; }
+  .btn { padding: 8px 14px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.88rem; transition: background .2s; margin-top: 8px; margin-right: 6px; }
   .btn-primary { background: #2563eb; color: #fff; }
   .btn-primary:hover { background: #1d4ed8; }
   .btn-secondary { background: #e5e7eb; color: #333; }
@@ -28,111 +27,75 @@
   .status.failed { color: #dc2626; }
   .status.connecting { color: #d97706; }
   .chat { margin-top: 16px; background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
-  .chat h2 { font-size: 1.05rem; margin-top: 0; }
-  #messages { height: 180px; overflow-y: auto; border: 1px solid #eee; border-radius: 6px; padding: 10px; background: #fafafa; margin-bottom: 10px; }
+  #messages { height: 160px; overflow-y: auto; border: 1px solid #eee; border-radius: 6px; padding: 10px; background: #fafafa; margin-bottom: 10px; }
   .msg { margin-bottom: 6px; font-size: 0.9rem; word-break: break-all; }
   .msg .who { font-weight: 600; color: #2563eb; }
   .msg .who.self { color: #16a34a; }
   .msg .time { color: #999; font-size: 0.75rem; margin-left: 6px; }
   .row { display: flex; gap: 8px; }
   .row input { flex: 1; }
-  .log { margin-top: 16px; background: #1e1e1e; color: #d4d4d4; border-radius: 10px; padding: 12px; font-family: monospace; font-size: 0.78rem; max-height: 150px; overflow-y: auto; }
+  .log { margin-top: 16px; background: #1e1e1e; color: #d4d4d4; border-radius: 10px; padding: 12px; font-family: monospace; font-size: 0.78rem; max-height: 140px; overflow-y: auto; }
   .log .entry { margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px; }
   .hint { font-size: 0.8rem; color: #888; margin-top: 6px; line-height: 1.4; }
-  .copy-hint { font-size: 0.75rem; color: #2563eb; margin-top: 4px; cursor: pointer; }
-  .copy-hint:hover { text-decoration: underline; }
-  .warn { color: #b45309; background: #fffbeb; border: 1px solid #fcd34d; padding: 8px; border-radius: 6px; font-size: 0.82rem; margin-top: 8px; display: none; }
 </style>
 </head>
 <body>
 
-<h1>WebRTC P2P 安全直连实验</h1>
-<div class="subtitle">纯前端实现。SDP 信令支持 Base64 / AES-256 加密后再交换。</div>
+<h1>WebRTC P2P 安全直连</h1>
+<div class="subtitle">AES-256 加密信令</div>
 
-<!-- 安全设置 -->
+<!-- 配置 -->
 <div class="card" style="margin-bottom: 16px;">
-  <h2>传输安全设置 <span class="badge">双方需保持一致</span></h2>
-  <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">
+  <h2>连接配置</h2>
+  <div class="grid" style="grid-template-columns: 2fr 1fr; gap: 12px;">
     <div>
-      <label>信令传输模式</label>
-      <select id="encMode" onchange="onModeChange()">
-        <option value="plain">明文 JSON（调试使用）</option>
-        <option value="base64" selected>Base64 编码（防肉眼读取）</option>
-        <option value="aes">AES-256-GCM 加密（防中间人窃听）</option>
-      </select>
+      <label>房间号</label>
+      <input type="text" id="roomId" placeholder="建议 8 位以上随机字符串" value="">
     </div>
-    <div>
-      <label>共享密钥（仅 AES 模式需要）</label>
-      <input type="password" id="sharedKey" placeholder="双方输入相同密码..." disabled>
+    <div style="display:flex;align-items:flex-end;">
+      <button class="btn btn-secondary" onclick="genRoom()" style="width:100%;">随机生成</button>
     </div>
   </div>
-  <div class="warn" id="keyWarn">当前模式需要输入共享密钥</div>
-  <div class="hint">提示：若选择 AES 加密，双方必须在此输入完全相同的密码，否则无法解密。Base64 仅做编码，无密码也可解码。</div>
 </div>
 
-<!-- 左右操作区 -->
+<!-- 控制 -->
 <div class="grid">
   <div class="card">
     <h2>发起方 (Offer)</h2>
-    <button class="btn btn-primary" id="btnOffer" onclick="createOffer()">1. 创建 Offer</button>
-    <label>生成的 Offer（复制给对方）:</label>
-    <textarea id="localOffer" readonly placeholder="点击上方按钮生成..."></textarea>
-    <div class="copy-hint" onclick="copy('localOffer')">点击复制到剪贴板</div>
-
-    <label>对方发来的 Answer（粘贴到这里）:</label>
-    <textarea id="remoteAnswer" placeholder="粘贴对方发来的 Answer..."></textarea>
-    <button class="btn btn-secondary" id="btnConnect" onclick="connectAnswer()" disabled>2. 连接</button>
+    <button class="btn btn-primary" id="btnOffer" onclick="startAsOffer()">发起连接</button>
     <div class="status" id="statusA">状态: 未连接</div>
+    <textarea id="debugA" readonly placeholder="调试输出..." style="margin-top:8px;"></textarea>
   </div>
-
   <div class="card">
     <h2>接收方 (Answer)</h2>
-    <label>对方发来的 Offer（粘贴到这里）:</label>
-    <textarea id="remoteOffer" placeholder="粘贴对方发来的 Offer..."></textarea>
-    <div class="copy-hint" onclick="copy('remoteOffer')">点击清空</div>
-
-    <button class="btn btn-primary" id="btnAnswer" onclick="createAnswer()">1. 创建 Answer</button>
-    <label>生成的 Answer（复制给对方）:</label>
-    <textarea id="localAnswer" readonly placeholder="点击上方按钮生成..."></textarea>
-    <div class="copy-hint" onclick="copy('localAnswer')">点击复制到剪贴板</div>
+    <button class="btn btn-primary" id="btnAnswer" onclick="startAsAnswer()">接收连接</button>
     <div class="status" id="statusB">状态: 未连接</div>
+    <textarea id="debugB" readonly placeholder="调试输出..." style="margin-top:8px;"></textarea>
   </div>
 </div>
 
 <!-- 聊天 -->
 <div class="chat">
-  <h2>聊天室 <span style="font-size:0.8rem;color:#666;font-weight:normal;">（DataChannel）</span></h2>
+  <h2>聊天室</h2>
   <div id="messages"></div>
   <div class="row">
     <input type="text" id="chatInput" placeholder="输入消息按回车发送..." onkeydown="if(event.key==='Enter') sendMsg()" disabled>
     <button class="btn btn-primary" onclick="sendMsg()" id="btnSend" disabled>发送</button>
   </div>
-  <div class="hint">
-    操作流程：发起方创建 Offer → 复制文本给接收方 → 接收方创建 Answer → 复制文本回发起方 → 发起方点击连接。
-  </div>
 </div>
 
-<div class="log" id="log">
-  <div class="entry">[系统] 页面已加载，WebRTC 与 Web Crypto 就绪。</div>
-</div>
+<div class="log" id="log"><div class="entry">[系统] 页面已加载。</div></div>
 
 <script>
-// ==================== 配置 ====================
+const WORKER_URL = 'webrtcp2proom.1834840.workers.dev';
+
 const ICE_SERVERS = [
-  //{ urls: "stun:stun.ustc.edu.cn" },     // 中科大
-  //{ urls: "stun:stun.hit.edu.cn" },      // 哈工大
-  //{ urls: "stun:stun.qq.com" },          // 腾讯
-  //{ urls: "stun:stun.miwifi.com" },      // 小米
   { urls: "stun:stun.l.google.com:19302" },
-  { urls: "stun:stun1.l.google.com:19302" },
-  { urls: "stun:stun2.l.google.com:19302" }
+  { urls: "stun:stun1.l.google.com:19302" }
 ];
 
-let pc = null;
-let dc = null;
-let role = null;
+let pc = null, dc = null, role = null, pollTimer = null;
 
-// ==================== UI 辅助 ====================
 function log(msg) {
   const div = document.createElement('div');
   div.className = 'entry';
@@ -160,50 +123,44 @@ function escapeHtml(t) {
   return t.replace(/[&<<>"']/g, m => ({'&':'&amp;','<<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m]));
 }
 
-function copy(elId) {
-  const el = document.getElementById(elId);
-  if (!el.value) return;
-  if (elId === 'remoteOffer') { el.value = ''; log('已清空 Offer 输入框'); return; }
-  navigator.clipboard.writeText(el.value).then(() => log('已复制到剪贴板')).catch(() => {
-    el.select(); document.execCommand('copy'); log('已复制（fallback）');
-  });
+function getPassphrase() {
+  const val = document.getElementById('roomId').value.trim();
+  if (!val) throw new Error('请输入房间号');
+  if (val.length < 4) throw new Error('房间号至少 4 位');
+  return val;
 }
 
-function onModeChange() {
-  const mode = document.getElementById('encMode').value;
-  const keyInput = document.getElementById('sharedKey');
-  const warn = document.getElementById('keyWarn');
-  if (mode === 'aes') {
-    keyInput.disabled = false;
-    warn.style.display = 'block';
-  } else {
-    keyInput.disabled = true;
-    warn.style.display = 'none';
-  }
+// 原始房间号直接作为 AES 密钥
+function getKey() { return getPassphrase(); }
+
+// 传输到 Worker 的 room ID：SHA-256 截断前 16 位 hex
+async function getApiRoomId() {
+  const pass = getPassphrase();
+  const buf = new TextEncoder().encode(pass);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  const hex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return hex.slice(0, 16);
 }
 
-function getMode() { return document.getElementById('encMode').value; }
-function getKeyText() { return document.getElementById('sharedKey').value; }
+function genRoom() {
+  const id = 'r-' + Math.random().toString(36).slice(2, 10) + '-' + Math.random().toString(36).slice(2, 6);
+  document.getElementById('roomId').value = id;
+  log('已生成随机房间号: ' + id);
+}
 
-// ==================== 编解码层 ====================
-async function deriveKey(passphrase, salt) {
+// ==================== AES 编解码（固定模式） ====================
+async function deriveKey(pass, salt) {
   const enc = new TextEncoder();
-  const material = await crypto.subtle.importKey('raw', enc.encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+  const mat = await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveKey']);
   return crypto.subtle.deriveKey(
     { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
-    material, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+    mat, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
   );
 }
 
 async function encodePayload(obj) {
-  const mode = getMode();
   const json = JSON.stringify(obj);
-  if (mode === 'plain') return json;
-  if (mode === 'base64') return btoa(json);
-
-  // AES
-  const pass = getKeyText();
-  if (!pass) throw new Error('AES 模式需要输入共享密钥');
+  const pass = getKey();
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveKey(pass, salt);
@@ -214,48 +171,58 @@ async function encodePayload(obj) {
 }
 
 async function decodePayload(str) {
-  const mode = getMode();
   str = str.trim();
-  if (!str) throw new Error('输入为空');
-  if (mode === 'plain') return JSON.parse(str);
-  if (mode === 'base64') return JSON.parse(atob(str));
-
-  // AES
-  const pass = getKeyText();
-  if (!pass) throw new Error('AES 模式需要输入共享密钥');
+  if (!str) throw new Error('空输入');
+  const pass = getKey();
   const raw = Uint8Array.from(atob(str), c => c.charCodeAt(0));
-  const salt = raw.slice(0, 16);
-  const iv = raw.slice(16, 28);
-  const cipher = raw.slice(28);
+  const salt = raw.slice(0, 16), iv = raw.slice(16, 28), cipher = raw.slice(28);
   const key = await deriveKey(pass, salt);
   const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cipher);
   return JSON.parse(new TextDecoder().decode(plain));
 }
 
+// ==================== 信令 API ====================
+async function signalPost(payload) {
+  const room = await getApiRoomId();
+  const url = `${WORKER_URL}/room/${room}`;
+  const res = await fetch(url, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error('信令 POST 失败: ' + res.status);
+  return res.json();
+}
+
+async function signalGet() {
+  const room = await getApiRoomId();
+  const url = `${WORKER_URL}/room/${room}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('信令 GET 失败: ' + res.status);
+  return res.json();
+}
+
 // ==================== WebRTC ====================
 function setupPC() {
   pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-
   pc.oniceconnectionstatechange = () => {
     log(`ICE 状态: ${pc.iceConnectionState}`);
     const sid = role === 'offer' ? 'statusA' : 'statusB';
-    if (['connected', 'completed'].includes(pc.iceConnectionState)) {
+    if (['connected','completed'].includes(pc.iceConnectionState)) {
       setStatus(sid, '已连接 (P2P)', 'connected');
-    } else if (['failed', 'disconnected'].includes(pc.iceConnectionState)) {
+      stopPoll();
+    } else if (['failed','disconnected'].includes(pc.iceConnectionState)) {
       setStatus(sid, '断开/失败', 'failed');
     }
   };
-
   pc.ondatachannel = (e) => {
     log('收到 DataChannel');
-    dc = e.channel;
-    setupDC();
+    dc = e.channel; setupDC();
   };
 }
 
 function setupDC() {
   dc.onopen = () => {
-    log('DataChannel 已打开，可以通信');
+    log('DataChannel 已打开');
     document.getElementById('chatInput').disabled = false;
     document.getElementById('btnSend').disabled = false;
   };
@@ -271,12 +238,18 @@ function waitGathering() {
   return new Promise((resolve) => {
     if (pc.iceGatheringState === 'complete') { resolve(); return; }
     const t = setInterval(() => { if (pc.iceGatheringState === 'complete') { clearInterval(t); resolve(); } }, 200);
-    setTimeout(() => { clearInterval(t); resolve(); }, 60000);
+    setTimeout(() => { clearInterval(t); resolve(); }, 8000);
   });
 }
 
-async function createOffer() {
+function stopPoll() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+// ==================== 发起方 ====================
+async function startAsOffer() {
   try {
+    stopPoll();
     role = 'offer';
     setupPC();
     dc = pc.createDataChannel('chat', { ordered: true });
@@ -284,56 +257,69 @@ async function createOffer() {
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    log('Offer local desc 已设置，收集 ICE 中...');
+    log('Offer 创建中，收集 ICE...');
     await waitGathering();
 
-    const out = await encodePayload(pc.localDescription);
-    document.getElementById('localOffer').value = out;
-    log(`Offer 已生成（模式: ${getMode()}）`);
+    const encoded = await encodePayload(pc.localDescription);
+    document.getElementById('debugA').value = encoded.slice(0, 120) + '...';
+    await signalPost({ offer: encoded });
+    log('Offer 已上传至 Worker');
+
     setStatus('statusA', '等待对方 Answer...', 'connecting');
-    document.getElementById('btnConnect').disabled = false;
+    document.getElementById('btnOffer').disabled = true;
+
+    pollTimer = setInterval(async () => {
+      try {
+        const data = await signalGet();
+        if (data.answer && !pc.remoteDescription) {
+          const answer = await decodePayload(data.answer);
+          await pc.setRemoteDescription(answer);
+          log('收到 Answer，连接建立中...');
+          stopPoll();
+        }
+      } catch (e) { log('轮询出错: ' + e.message); }
+    }, 1500);
+
   } catch (err) {
-    log('创建 Offer 失败: ' + err.message);
+    log('发起失败: ' + err.message);
     alert(err.message);
   }
 }
 
-async function connectAnswer() {
+// ==================== 接收方 ====================
+async function startAsAnswer() {
   try {
-    const text = document.getElementById('remoteAnswer').value.trim();
-    if (!text) return alert('请先粘贴对方发来的 Answer');
-    const desc = await decodePayload(text);
-    await pc.setRemoteDescription(desc);
-    log('Answer 已设置，正在建立连接...');
-    setStatus('statusA', '连接中...', 'connecting');
-  } catch (err) {
-    log('连接失败: ' + err.message);
-    alert('解析 Answer 出错: ' + err.message);
-  }
-}
-
-async function createAnswer() {
-  try {
+    stopPoll();
     role = 'answer';
-    const text = document.getElementById('remoteOffer').value.trim();
-    if (!text) return alert('请先粘贴对方发来的 Offer');
-    const offer = await decodePayload(text);
+    setStatus('statusB', '等待 Offer...', 'connecting');
+    document.getElementById('btnAnswer').disabled = true;
+    log('开始轮询 Offer...');
 
-    setupPC();
-    await pc.setRemoteDescription(offer);
-    log('Offer remote desc 已设置');
+    pollTimer = setInterval(async () => {
+      try {
+        const data = await signalGet();
+        if (data.offer && !pc) {
+          log('收到 Offer');
+          const offer = await decodePayload(data.offer);
+          setupPC();
+          await pc.setRemoteDescription(offer);
 
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    log('Answer local desc 已设置，收集 ICE 中...');
-    await waitGathering();
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          await waitGathering();
 
-    const out = await encodePayload(pc.localDescription);
-    document.getElementById('localAnswer').value = out;
-    log(`Answer 已生成（模式: ${getMode()}）`);
-    setStatus('statusB', '等待对方连接...', 'connecting');
+          const encoded = await encodePayload(pc.localDescription);
+          document.getElementById('debugB').value = encoded.slice(0, 120) + '...';
+          await signalPost({ answer: encoded });
+          log('Answer 已上传至 Worker');
+          setStatus('statusB', '等待连接完成...', 'connecting');
+          stopPoll();
+        }
+      } catch (e) { log('轮询出错: ' + e.message); }
+    }, 1500);
+
   } catch (err) {
-    log('创建 Answer 失败: ' + err.message);
+    log('接收失败: ' + err.message);
     alert(err.message);
   }
 }
@@ -347,8 +333,7 @@ function sendMsg() {
   input.value = '';
 }
 
-window.addEventListener('beforeunload', () => { if (pc) pc.close(); });
-onModeChange();
+window.addEventListener('beforeunload', () => { stopPoll(); if (pc) pc.close(); });
 </script>
 </body>
 </html>
