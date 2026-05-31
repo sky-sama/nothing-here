@@ -372,7 +372,7 @@ function connectWS() {
     cleanup();
     const room = encodeURIComponent(getPassphrase());
     const url = `${WS_URL}/room/${room}`;
-    log('WebSocket 连接: ' + url);
+    log('WebSocket 连接: ' + room);
 
     ws = new WebSocket(url);
     setStatus('statusWS', '连接中...', 'connecting');
@@ -404,7 +404,7 @@ function connectWS() {
     };
 
   } catch (err) {
-    log('WebSocket 连接失败: ' + err.message);
+    log('WebSocket 连接失败: ' + err.message + err.code);
     alert(err.message);
   }
 }
