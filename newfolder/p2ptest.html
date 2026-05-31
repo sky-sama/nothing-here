@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WebRTC P2P 安全直连</title>
+<title>P2P / WebSocket 双模式直连</title>
 <style>
   * { box-sizing: border-box; }
   body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
@@ -11,7 +11,7 @@
   .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 16px; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
-  .card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+  .card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); margin-bottom: 16px; }
   .card h2 { font-size: 1.05rem; margin-top: 0; margin-bottom: 12px; color: #333; }
   label { display: block; font-size: 0.82rem; color: #555; margin-bottom: 4px; margin-top: 10px; }
   input, textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-family: monospace; font-size: 0.85rem; }
@@ -22,12 +22,15 @@
   .btn-secondary { background: #e5e7eb; color: #333; }
   .btn-secondary:hover { background: #d1d5db; }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .mode-btn { background: #f3f4f6; color: #374151; border: 2px solid transparent; }
+  .mode-btn:hover { background: #e5e7eb; }
+  .mode-btn.active { background: #dbeafe; color: #1e40af; border-color: #2563eb; font-weight: 600; }
   .status { margin-top: 8px; font-size: 0.85rem; font-weight: 600; }
   .status.connected { color: #16a34a; }
   .status.failed { color: #dc2626; }
   .status.connecting { color: #d97706; }
-  .chat { margin-top: 16px; background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
-  #messages { height: 160px; overflow-y: auto; border: 1px solid #eee; border-radius: 6px; padding: 10px; background: #fafafa; margin-bottom: 10px; }
+  .chat { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+  #messages { height: 180px; overflow-y: auto; border: 1px solid #eee; border-radius: 6px; padding: 10px; background: #fafafa; margin-bottom: 10px; }
   .msg { margin-bottom: 6px; font-size: 0.9rem; word-break: break-all; }
   .msg .who { font-weight: 600; color: #2563eb; }
   .msg .who.self { color: #16a34a; }
@@ -36,21 +39,28 @@
   .row input { flex: 1; }
   .log { margin-top: 16px; background: #1e1e1e; color: #d4d4d4; border-radius: 10px; padding: 12px; font-family: monospace; font-size: 0.78rem; max-height: 140px; overflow-y: auto; }
   .log .entry { margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px; }
-  .hint { font-size: 0.8rem; color: #888; margin-top: 6px; line-height: 1.4; }
 </style>
 </head>
 <body>
 
-<h1>WebRTC P2P 安全直连</h1>
-<div class="subtitle">AES-256 加密信令</div>
+<h1>P2P / WebSocket 双模式直连</h1>
+<div class="subtitle">WebRTC P2P 与 WebSocket 中继互相独立，按需选择，不自动兜底。</div>
 
-<!-- 配置 -->
-<div class="card" style="margin-bottom: 16px;">
-  <h2>连接配置</h2>
+<!-- 模式选择 -->
+<div class="card">
+  <h2>连接模式</h2>
+  <div>
+    <button class="btn mode-btn active" id="btnModeP2P" onclick="setMode('p2p')">WebRTC P2P</button>
+    <button class="btn mode-btn" id="btnModeWS" onclick="setMode('ws')">WebSocket 中继</button>
+  </div>
+</div>
+
+<!-- 共享配置 -->
+<div class="card">
+  <h2>房间配置</h2>
   <div class="grid" style="grid-template-columns: 2fr 1fr; gap: 12px;">
     <div>
-      <label>房间号</label>
-      <input type="text" id="roomId" placeholder="建议 8 位以上随机字符串" value="">
+      <input type="text" id="roomId" placeholder="建议 8 位以上随机字符串，双方需一致" value="">
     </div>
     <div style="display:flex;align-items:flex-end;">
       <button class="btn btn-secondary" onclick="genRoom()" style="width:100%;">随机生成</button>
@@ -58,25 +68,34 @@
   </div>
 </div>
 
-<!-- 控制 -->
-<div class="grid">
-  <div class="card">
-    <h2>发起方 (Offer)</h2>
-    <button class="btn btn-primary" id="btnOffer" onclick="startAsOffer()">发起连接</button>
-    <div class="status" id="statusA">状态: 未连接</div>
-    <textarea id="debugA" readonly placeholder="调试输出..." style="margin-top:8px;"></textarea>
+<!-- P2P 面板 -->
+<div id="panel-p2p">
+  <div class="grid">
+    <div class="card">
+      <h2>发起方 (Offer)</h2>
+      <button class="btn btn-primary" id="btnOffer" onclick="startAsOffer()">发起连接</button>
+      <div class="status" id="statusA">状态: 未连接</div>
+    </div>
+    <div class="card">
+      <h2>接收方 (Answer)</h2>
+      <button class="btn btn-primary" id="btnAnswer" onclick="startAsAnswer()">接收连接</button>
+      <div class="status" id="statusB">状态: 未连接</div>
+    </div>
   </div>
+</div>
+
+<!-- WebSocket 面板 -->
+<div id="panel-ws" style="display:none;">
   <div class="card">
-    <h2>接收方 (Answer)</h2>
-    <button class="btn btn-primary" id="btnAnswer" onclick="startAsAnswer()">接收连接</button>
-    <div class="status" id="statusB">状态: 未连接</div>
-    <textarea id="debugB" readonly placeholder="调试输出..." style="margin-top:8px;"></textarea>
+    <h2>WebSocket 中继</h2>
+    <button class="btn btn-primary" id="btnWS" onclick="connectWS()">连接</button>
+    <div class="status" id="statusWS">状态: 未连接</div>
   </div>
 </div>
 
 <!-- 聊天 -->
 <div class="chat">
-  <h2>聊天室</h2>
+  <h2>聊天室 <span id="modeTag" style="font-size:0.8rem;color:#666;font-weight:normal;">(P2P)</span></h2>
   <div id="messages"></div>
   <div class="row">
     <input type="text" id="chatInput" placeholder="输入消息按回车发送..." onkeydown="if(event.key==='Enter') sendMsg()" disabled>
@@ -87,14 +106,18 @@
 <div class="log" id="log"><div class="entry">[系统] 页面已加载。</div></div>
 
 <script>
-const WORKER_URL = 'https://webfunction.pages.dev';
+// ==================== 硬编码配置 ====================
+const P2P_SIGNAL_URL = 'https://webfunction.pages.dev'; // ← P2P 信令地址（Cloudflare Pages/Worker）
+const WS_URL = 'https://app-38080-dh4300plus-7d7f-b68i.cn35.ugdocker.link';                     // ← WebSocket 中继地址（自建 Docker）
 
 const ICE_SERVERS = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" }
 ];
 
-let pc = null, dc = null, role = null, pollTimer = null;
+// ==================== 状态 ====================
+let currentMode = 'p2p';
+let pc = null, dc = null, ws = null, pollTimer = null, role = null;
 
 function log(msg) {
   const div = document.createElement('div');
@@ -130,10 +153,6 @@ function getPassphrase() {
   return val;
 }
 
-// 原始房间号直接作为 AES 密钥
-function getKey() { return getPassphrase(); }
-
-// 传输到 Worker 的 room ID：SHA-256 截断前 16 位 hex
 async function getApiRoomId() {
   const pass = getPassphrase();
   const buf = new TextEncoder().encode(pass);
@@ -148,7 +167,32 @@ function genRoom() {
   log('已生成随机房间号: ' + id);
 }
 
-// ==================== AES 编解码（固定模式） ====================
+// ==================== 模式切换 ====================
+function setMode(mode) {
+  cleanup();
+  currentMode = mode;
+  document.getElementById('modeTag').textContent = mode === 'p2p' ? '(P2P)' : '(WebSocket)';
+  document.getElementById('panel-p2p').style.display = mode === 'p2p' ? 'block' : 'none';
+  document.getElementById('panel-ws').style.display = mode === 'ws' ? 'block' : 'none';
+  document.getElementById('btnModeP2P').classList.toggle('active', mode === 'p2p');
+  document.getElementById('btnModeWS').classList.toggle('active', mode === 'ws');
+  log('已切换至 ' + (mode === 'p2p' ? 'P2P' : 'WebSocket') + ' 模式');
+}
+
+function cleanup() {
+  stopPoll();
+  if (pc) { pc.close(); pc = null; }
+  if (dc) { dc = null; }
+  if (ws) { ws.close(); ws = null; }
+  role = null;
+  document.getElementById('chatInput').disabled = true;
+  document.getElementById('btnSend').disabled = true;
+  setStatus('statusA', '未连接');
+  setStatus('statusB', '未连接');
+  setStatus('statusWS', '未连接');
+}
+
+// ==================== AES 编解码（P2P 专用） ====================
 async function deriveKey(pass, salt) {
   const enc = new TextEncoder();
   const mat = await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveKey']);
@@ -160,7 +204,7 @@ async function deriveKey(pass, salt) {
 
 async function encodePayload(obj) {
   const json = JSON.stringify(obj);
-  const pass = getKey();
+  const pass = getPassphrase();
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveKey(pass, salt);
@@ -173,7 +217,7 @@ async function encodePayload(obj) {
 async function decodePayload(str) {
   str = str.trim();
   if (!str) throw new Error('空输入');
-  const pass = getKey();
+  const pass = getPassphrase();
   const raw = Uint8Array.from(atob(str), c => c.charCodeAt(0));
   const salt = raw.slice(0, 16), iv = raw.slice(16, 28), cipher = raw.slice(28);
   const key = await deriveKey(pass, salt);
@@ -181,10 +225,10 @@ async function decodePayload(str) {
   return JSON.parse(new TextDecoder().decode(plain));
 }
 
-// ==================== 信令 API ====================
+// ==================== P2P 信令 API ====================
 async function signalPost(payload) {
   const room = await getApiRoomId();
-  const url = `${WORKER_URL}/room/${room}`;
+  const url = `${P2P_SIGNAL_URL}/room/${room}`;
   const res = await fetch(url, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -195,13 +239,13 @@ async function signalPost(payload) {
 
 async function signalGet() {
   const room = await getApiRoomId();
-  const url = `${WORKER_URL}/room/${room}`;
+  const url = `${P2P_SIGNAL_URL}/room/${room}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error('信令 GET 失败: ' + res.status);
   return res.json();
 }
 
-// ==================== WebRTC ====================
+// ==================== WebRTC (P2P) ====================
 function setupPC() {
   pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
   pc.oniceconnectionstatechange = () => {
@@ -238,7 +282,7 @@ function waitGathering() {
   return new Promise((resolve) => {
     if (pc.iceGatheringState === 'complete') { resolve(); return; }
     const t = setInterval(() => { if (pc.iceGatheringState === 'complete') { clearInterval(t); resolve(); } }, 200);
-    setTimeout(() => { clearInterval(t); resolve(); }, 60000);
+    setTimeout(() => { clearInterval(t); resolve(); }, 8000);
   });
 }
 
@@ -246,10 +290,10 @@ function stopPoll() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
 
-// ==================== 发起方 ====================
 async function startAsOffer() {
   try {
-    stopPoll();
+    if (currentMode !== 'p2p') return;
+    cleanup();
     role = 'offer';
     setupPC();
     dc = pc.createDataChannel('chat', { ordered: true });
@@ -261,11 +305,9 @@ async function startAsOffer() {
     await waitGathering();
 
     const encoded = await encodePayload(pc.localDescription);
-    document.getElementById('debugA').value = encoded.slice(0, 120) + '...';
-    await signalPost({ offer: encoded });
-    log('Offer 已上传至 Worker');
-
     setStatus('statusA', '等待对方 Answer...', 'connecting');
+    await signalPost({ offer: encoded });
+    log('Offer 已上传');
     document.getElementById('btnOffer').disabled = true;
 
     pollTimer = setInterval(async () => {
@@ -278,7 +320,7 @@ async function startAsOffer() {
           stopPoll();
         }
       } catch (e) { log('轮询出错: ' + e.message); }
-    }, 15000);
+    }, 1500);
 
   } catch (err) {
     log('发起失败: ' + err.message);
@@ -286,10 +328,10 @@ async function startAsOffer() {
   }
 }
 
-// ==================== 接收方 ====================
 async function startAsAnswer() {
   try {
-    stopPoll();
+    if (currentMode !== 'p2p') return;
+    cleanup();
     role = 'answer';
     setStatus('statusB', '等待 Offer...', 'connecting');
     document.getElementById('btnAnswer').disabled = true;
@@ -309,14 +351,13 @@ async function startAsAnswer() {
           await waitGathering();
 
           const encoded = await encodePayload(pc.localDescription);
-          document.getElementById('debugB').value = encoded.slice(0, 120) + '...';
-          await signalPost({ answer: encoded });
-          log('Answer 已上传至 Worker');
           setStatus('statusB', '等待连接完成...', 'connecting');
+          await signalPost({ answer: encoded });
+          log('Answer 已上传');
           stopPoll();
         }
       } catch (e) { log('轮询出错: ' + e.message); }
-    }, 15000);
+    }, 1500);
 
   } catch (err) {
     log('接收失败: ' + err.message);
@@ -324,16 +365,70 @@ async function startAsAnswer() {
   }
 }
 
+// ==================== WebSocket ====================
+function connectWS() {
+  try {
+    if (currentMode !== 'ws') return;
+    cleanup();
+    const room = encodeURIComponent(getPassphrase());
+    const url = `${WS_URL}/room/${room}`;
+    log('WebSocket 连接: ' + url);
+
+    ws = new WebSocket(url);
+    setStatus('statusWS', '连接中...', 'connecting');
+    document.getElementById('btnWS').disabled = true;
+
+    ws.onopen = () => {
+      log('WebSocket 已连接');
+      setStatus('statusWS', '已连接', 'connected');
+      document.getElementById('chatInput').disabled = false;
+      document.getElementById('btnSend').disabled = false;
+    };
+
+    ws.onmessage = (e) => {
+      addMsg('对方', e.data);
+    };
+
+    ws.onclose = () => {
+      log('WebSocket 已断开');
+      setStatus('statusWS', '已断开', 'failed');
+      document.getElementById('chatInput').disabled = true;
+      document.getElementById('btnSend').disabled = true;
+      document.getElementById('btnWS').disabled = false;
+    };
+
+    ws.onerror = () => {
+      log('WebSocket 发生错误');
+      setStatus('statusWS', '错误', 'failed');
+      document.getElementById('btnWS').disabled = false;
+    };
+
+  } catch (err) {
+    log('WebSocket 连接失败: ' + err.message);
+    alert(err.message);
+  }
+}
+
+// ==================== 聊天发送 ====================
 function sendMsg() {
   const input = document.getElementById('chatInput');
   const text = input.value.trim();
-  if (!text || !dc || dc.readyState !== 'open') return;
-  dc.send(text);
-  addMsg('我', text);
-  input.value = '';
+  if (!text) return;
+
+  if (currentMode === 'p2p') {
+    if (!dc || dc.readyState !== 'open') { log('DataChannel 未就绪'); return; }
+    dc.send(text);
+    addMsg('我', text);
+    input.value = '';
+  } else if (currentMode === 'ws') {
+    if (!ws || ws.readyState !== 1) { log('WebSocket 未连接'); return; }
+    ws.send(text);
+    addMsg('我', text);
+    input.value = '';
+  }
 }
 
-window.addEventListener('beforeunload', () => { stopPoll(); if (pc) pc.close(); });
+window.addEventListener('beforeunload', cleanup);
 </script>
 </body>
 </html>
